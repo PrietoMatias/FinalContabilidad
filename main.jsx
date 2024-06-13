@@ -165,6 +165,17 @@ const productosReducer = (state, action) => {
       return state;
     case 'SET_CARRITO':
       return { ...state, carrito: action.payload };
+    case 'VACIAR_CARRITO':
+      // Restaura el stock de los productos en el carrito
+      const productosConStockRestaurado = state.productos.map(producto => {
+        const productoEnCarrito = state.carrito.find(item => item.id === producto.id);
+        if (productoEnCarrito) {
+          return { ...producto, stock: producto.stock + productoEnCarrito.cantidad };
+        }
+        return producto;
+      });
+
+      return { ...state, carrito: [], productos: productosConStockRestaurado };
     default:
       return state;
   }
@@ -203,6 +214,12 @@ const useProductos = () => {
 
 
 const Carrito = () => {
+  const [formdata, setFormdata] = useState({
+    nombre: '',
+    domicilio: '',
+    cuit: '',
+  })
+  const { state, dispatch } = useProductos();
   const componentRef = useRef()
 
   const generatePDF = () => {
@@ -225,15 +242,57 @@ const Carrito = () => {
 
 const fechaActual = getFormattedDate();
 
-
-
-
-  const { state } = useProductos();
+  const handleChange = (e)=>{
+    const {name, value} = e.target
+    setFormdata(prevState=>({
+      ...prevState, [name]: value
+    })
+    )
+  }
   const { carrito } = state;
   const subtotal = carrito.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
   const total = subtotal;
+  const vaciarCarrito = () => ({
+    type: 'VACIAR_CARRITO',
+  });
+
+  const handleVaciar = () => {
+    dispatch(vaciarCarrito());
+  };
   return (
     <>
+    <form className="mb-3">
+  <div className="mb-3">
+    <label htmlFor="nombre" className="form-label">Nombre</label>
+    <input 
+      type="text" 
+      className="form-control" 
+      name="nombre" 
+      value={formdata.nombre} 
+      onChange={handleChange} 
+    />
+  </div>
+  <div className="mb-3">
+    <label htmlFor="domicilio" className="form-label">Domicilio</label>
+    <input 
+      type="text" 
+      className="form-control" 
+      name="domicilio" 
+      value={formdata.domicilio} 
+      onChange={handleChange} 
+    />
+  </div>
+  <div className="mb-3">
+    <label htmlFor="cuit" className="form-label">Cuit</label>
+    <input 
+      type="text" 
+      className="form-control" 
+      name="cuit" 
+      value={formdata.cuit} 
+      onChange={handleChange} 
+    />
+  </div>
+</form>
     <div className="invoice-box" id='facturacPDF' ref={componentRef}>
     <table cellPadding="0" cellSpacing="0">
         <tr className="top">
@@ -263,8 +322,8 @@ const fechaActual = getFormattedDate();
                 <table>
                     <tr>
                         <td colSpan="2">
-                            Señor(es): ..................................................<br />
-                            Domicilio: ..................................................
+                            Señor(es): {!formdata.nombre ?'..................................................' : formdata.nombre}<br />
+                            Domicilio: {!formdata.domicilio ? '..................................................' : formdata.domicilio}
                         </td>
                         <td colSpan="2" className="align-right">
                             CUIT N°: 439231203<br />
@@ -281,7 +340,7 @@ const fechaActual = getFormattedDate();
                 <label className="checkbox-label"><input type="checkbox" /> Exento</label>
                 <label className="checkbox-label"><input type="checkbox" /> No Respns.</label>
                 <label className="checkbox-label"><input type="checkbox" /> Cons. Final</label> <br/>
-                <span className="align-right">CUIT N° .......................</span>
+                <span className="align-right">CUIT N° {!formdata.cuit ? '.......................................' : formdata.cuit}</span>
             </td>
         </tr>
         <tr className="heading">
@@ -321,12 +380,13 @@ const fechaActual = getFormattedDate();
     </div>
 </div>
 <div>
-      <button className="btn btn-success" onClick={generatePDF}>Imprimir Factura</button>
+      <button className="btn btn-success" onClick={generatePDF}>Imprimir Factura</button> <br /> <br />
+      <button className="btn btn-danger" onClick={handleVaciar} >Vaciar Carrito</button>
     </div></>
   );
 };
 
-const Productos = ({ onEditarProducto }) => {
+const Productos = ({ onEditarProducto, searchTerm }) => {
   const { state, dispatch } = useProductos();
   const { productos } = state;
 
@@ -341,6 +401,11 @@ const Productos = ({ onEditarProducto }) => {
   const eliminarProducto = (id) => {
     dispatch({ type: 'ELIMINAR_PRODUCTO', payload: id });
   };
+
+  // Filtra los productos según el término de búsqueda
+  const productosFiltrados = productos.filter((producto) =>
+    producto.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="tabla-productos">
@@ -357,7 +422,7 @@ const Productos = ({ onEditarProducto }) => {
           </tr>
         </thead>
         <tbody>
-          {productos.map((p) => (
+          {productosFiltrados.map((p) => (
             <tr key={p.id}>
               <th scope="row">{p.id}</th>
               <td>{p.nombre}</td>
@@ -400,6 +465,7 @@ const Productos = ({ onEditarProducto }) => {
 
 
 
+
 const Form = ({ id, nombre, stock, precio, setVentana }) => {
   const { dispatch } = useProductos();
   const [nuevonombre, setNombre] = useState(nombre);
@@ -437,28 +503,40 @@ const Form = ({ id, nombre, stock, precio, setVentana }) => {
   };
 
   return (
-    <form>
-      <input
-        type="text"
-        placeholder="Nombre"
-        value={nuevonombre}
-        onChange={(e) => setNombre(e.target.value)}
-      />
-      <input
-        type="number"
-        placeholder="Unidades"
-        value={unidades}
-        onChange={(e) => setUnidades(Number(e.target.value))}
-      />
-      <input
-        type="number"
-        placeholder="Precio"
-        value={valor}
-        onChange={(e) => setValor(Number(e.target.value))}
-      />
-      <button onClick={editar}>Aceptar</button>
-      <button onClick={cancelar}>Cancelar</button>
-    </form>
+    <form className="mb-3">
+  <div className="mb-3">
+    <label htmlFor="nombreProducto" className="form-label">Nombre del Producto</label>
+    <input 
+      type="text" 
+      className="form-control" 
+      placeholder="Nombre" 
+      value={nuevonombre} 
+      onChange={(e) => setNombre(e.target.value)} 
+    />
+  </div>
+  <div className="mb-3">
+    <label htmlFor="unidades" className="form-label">Unidades</label>
+    <input 
+      type="number" 
+      className="form-control" 
+      placeholder="Unidades" 
+      value={unidades} 
+      onChange={(e) => setUnidades(Number(e.target.value))} 
+    />
+  </div>
+  <div className="mb-3">
+    <label htmlFor="precio" className="form-label">Precio</label>
+    <input 
+      type="number" 
+      className="form-control" 
+      placeholder="Precio" 
+      value={valor} 
+      onChange={(e) => setValor(Number(e.target.value))} 
+    />
+  </div>
+  <button className="btn btn-primary me-2" onClick={editar}>Aceptar</button>
+  <button className="btn btn-secondary" onClick={cancelar}>Cancelar</button>
+</form>
   );
 };
 
@@ -469,6 +547,7 @@ function App() {
   const [home, setHome] = useState(true); 
   const [ventanaCarrito, setVentanaCarrito] = useState(false);
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
+  const [searchTerm, setSearchTerm] = useState(""); // Estado para el término de búsqueda
 
   const productosVacios = {
     id: null,
@@ -489,6 +568,10 @@ function App() {
     setAgregar(true);
   };
 
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+  };
+
   return (
     <ProductosProvider>
       <nav className="navbar bg-body-tertiary">
@@ -502,13 +585,12 @@ function App() {
               type="search"
               placeholder="Buscar"
               aria-label="Search"
+              value={searchTerm} // Valor del input controlado
+              onChange={handleSearchChange} // Manejador del cambio del input
             />
-            <button className="btn btn-outline-success" type="submit">
-              Buscar
-            </button>
           </form>
           <a className="navbar-brand" href="#">
-            SuperMerca
+            Super-VacasFood
           </a>
           <button
             className="navbar-toggler"
@@ -594,28 +676,24 @@ function App() {
                     <li>
                       <hr className="dropdown-divider" />
                     </li>
-                    <li>
-                      <a className="dropdown-item" href="#">
-                        Historial
-                      </a>
-                    </li>
                   </ul>
                 </li>
               </ul>
             </div>
           </div>
         </div>
-      </nav><br /> <br />
+      </nav><br /> 
       {agregar ? (
-      <Form {...productoSeleccionado} setVentana={setAgregar} />
-    ) : home ? (
-      <Productos onEditarProducto={handleEditarProducto} />
-    ) : ventanaCarrito ? (
-      <Carrito />
-    ) : null}
+        <Form {...productoSeleccionado} setVentana={setAgregar} />
+      ) : home ? (
+        <Productos onEditarProducto={handleEditarProducto} searchTerm={searchTerm} />
+      ) : ventanaCarrito ? (
+        <Carrito />
+      ) : null}
     </ProductosProvider>
   );
 }
+
 
 
 
